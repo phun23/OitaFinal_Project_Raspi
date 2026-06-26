@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Location Terminal</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #e3e8f0; margin-top: 50px; }
+        .panel { border: 2px solid #333; padding: 30px; width: 400px; margin: auto; background-color: white; border-radius: 12px; }
+        .lights { display: flex; justify-content: space-around; margin-bottom: 30px; }
+        .indicator { width: 80px; height: 80px; border-radius: 50%; background-color: grey; border: 3px solid #222; }
+        .buttons { display: flex; justify-content: space-around; margin-bottom: 30px; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; border-radius: 8px; font-weight: bold; }
+        .btn-ack { background-color: #ff4d4d; color: white; border: none; }
+        .btn-rst { background-color: #4CAF50; color: white; border: none; }
+        .message-board { border: 2px inset #ccc; height: 100px; background-color: #f9f9f9; padding: 10px; text-align: left; overflow-y: auto; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+    <div class="panel">
+        <h1 id="title_display">Location Terminal</h1>
+        
+        <div class="lights">
+            <div>
+                <div id="light_red" class="indicator"></div>
+                <p>Warning</p>
+            </div>
+            <div>
+                <div id="light_yellow" class="indicator"></div>
+                <p>Nurse Ack</p>
+            </div>
+        </div>
+
+        <div class="buttons">
+            <button class="btn-ack" onclick="sendState(1)">ACK (Help)</button>
+            <button class="btn-rst" onclick="sendState(0)">RST (Reset)</button>
+        </div>
+
+        <h3>Messages from Nurse:</h3>
+        <div id="msg_board" class="message-board"></div>
+    </div>
+
+    <script>
+        // ---------------------------------------------------------
+        // CONFIGURATION: Change this for each HTML file!
+        // Valid options: "action_hall", "library", "fabrication"
+        // ---------------------------------------------------------
+        const MY_LOCATION_ID = "action_hall";
+        
+        // Update Title on page
+        document.getElementById("title_display").innerText = MY_LOCATION_ID.replace("_", " ").toUpperCase();
+
+        const ws = new WebSocket("ws://192.168.1.100:9001/");
+        const lightRed = document.getElementById("light_red");
+        const lightYellow = document.getElementById("light_yellow");
+        const msgBoard = document.getElementById("msg_board");
+
+        ws.onopen = function() {
+            // Register this web UI as a listener for this specific location
+            ws.send(JSON.stringify({ "sender": MY_LOCATION_ID + "_ui", "action": "register" }));
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            // 1. Sync lights with system state
+            if (data.action === "state_change") {
+                const target = data.target || data.sender;
+                
+                if (target === MY_LOCATION_ID) {
+                    if (data.state === 0) { // Reset
+                        lightRed.style.backgroundColor = "grey";
+                        lightYellow.style.backgroundColor = "grey";
+                    } else if (data.state === 1) { // Ack Pressed
+                        lightRed.style.backgroundColor = "red";
+                        lightYellow.style.backgroundColor = "grey";
+                    } else if (data.state === 2) { // Nurse Acknowledged
+                        lightRed.style.backgroundColor = "grey";
+                        lightYellow.style.backgroundColor = "gold";
+                    }
+                }
+            }
+            
+            // 2. Receive text messages from Nurse
+            else if (data.action === "send_msg" && data.target === MY_LOCATION_ID) {
+                const time = new Date().toLocaleTimeString();
+                msgBoard.innerHTML += `<div><b>[${time}]</b> ${data.message}</div>`;
+                msgBoard.scrollTop = msgBoard.scrollHeight; // Auto-scroll to bottom
+            }
+        };
+
+        // 3. Send button presses to Server
+        function sendState(stateValue) {
+            const payload = { "sender": MY_LOCATION_ID, "action": "state_change", "state": stateValue };
+            ws.send(JSON.stringify(payload));
+        }
+    </script>
+</body>
+</html>

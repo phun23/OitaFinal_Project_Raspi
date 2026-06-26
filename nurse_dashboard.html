@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Nurse Station Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f9; }
+        .dashboard { display: flex; justify-content: space-around; margin-top: 20px; }
+        .section { border: 2px solid #ccc; padding: 20px; width: 30%; background-color: white; border-radius: 10px; }
+        .indicator { width: 50px; height: 50px; border-radius: 50%; margin: 10px auto; background-color: grey; border: 2px solid #333; }
+        .btn-ack { padding: 10px 20px; font-size: 16px; cursor: pointer; margin-bottom: 15px; }
+        .msg-box { width: 80%; padding: 5px; margin-bottom: 5px; }
+        .map-area { margin-top: 40px; border: 2px dashed #888; padding: 50px; background-color: #e9e9e9; }
+        
+        /* Flashing Animation */
+        @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        .flashing { animation: flash 1s infinite; }
+    </style>
+</head>
+<body>
+
+    <h1>Nurse Station Central Dashboard</h1>
+
+    <div class="dashboard">
+        <div class="section" id="action_hall_sec">
+            <h2>Action Hall</h2>
+            <div id="ind_action_hall" class="indicator"></div>
+            <button class="btn-ack" onclick="acknowledge('action_hall')">Acknowledge</button>
+            <br>
+            <input type="text" id="msg_action_hall" class="msg-box" placeholder="Type message...">
+            <button onclick="sendMessage('action_hall')">Send Msg</button>
+        </div>
+
+        <div class="section" id="library_sec">
+            <h2>Library</h2>
+            <div id="ind_library" class="indicator"></div>
+            <button class="btn-ack" onclick="acknowledge('library')">Acknowledge</button>
+            <br>
+            <input type="text" id="msg_library" class="msg-box" placeholder="Type message...">
+            <button onclick="sendMessage('library')">Send Msg</button>
+        </div>
+
+        <div class="section" id="fabrication_sec">
+            <h2>Fabrication</h2>
+            <div id="ind_fabrication" class="indicator"></div>
+            <button class="btn-ack" onclick="acknowledge('fabrication')">Acknowledge</button>
+            <br>
+            <input type="text" id="msg_fabrication" class="msg-box" placeholder="Type message...">
+            <button onclick="sendMessage('fabrication')">Send Msg</button>
+        </div>
+    </div>
+
+    <div class="map-area">
+        <h3>School Map Background (Placeholder)</h3>
+        <p>🗺️ 📍 Indicator lights will be positioned here later.</p>
+    </div>
+
+    <script>
+        const ws = new WebSocket("ws://192.168.1.100:9001/");
+        const colors = { "action_hall": "red", "library": "green", "fabrication": "yellow" };
+
+        ws.onopen = function() {
+            // Register this UI as the server UI
+            ws.send(JSON.stringify({ "sender": "server_ui", "action": "register" }));
+        };
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            
+            // Handle State Changes from clients or the Python server
+            if (data.action === "state_change") {
+                const loc_id = data.sender === "server" ? data.target : data.sender;
+                const ind = document.getElementById("ind_" + loc_id);
+                
+                if (data.state === 0) { // Idle
+                    ind.style.backgroundColor = "grey";
+                    ind.classList.remove("flashing");
+                } else if (data.state === 1) { // Client pressed ACK
+                    ind.style.backgroundColor = colors[loc_id];
+                    ind.classList.add("flashing");
+                } else if (data.state === 2) { // Nurse Acknowledged
+                    ind.style.backgroundColor = colors[loc_id];
+                    ind.classList.remove("flashing");
+                }
+            }
+        };
+
+        // Triggered by the HTML Acknowledge Button
+        function acknowledge(loc_id) {
+            // Send state 2 (Acknowledged) to the server
+            const payload = { "sender": "server", "action": "state_change", "state": 2, "target": loc_id };
+            ws.send(JSON.stringify(payload));
+        }
+
+        // Triggered by the HTML Send Msg Button
+        function sendMessage(loc_id) {
+            const textInput = document.getElementById("msg_" + loc_id);
+            if (textInput.value !== "") {
+                const payload = { "sender": "server_ui", "action": "send_msg", "target": loc_id, "message": textInput.value };
+                ws.send(JSON.stringify(payload));
+                textInput.value = ""; // Clear box after sending
+            }
+        }
+    </script>
+</body>
+</html>
